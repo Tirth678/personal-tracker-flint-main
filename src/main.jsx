@@ -1,4 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import { WorkspaceGate, AccountSettings } from "./components/cloud-workspace";
+import { saveWorkspace } from "./lib/cloud";
+import { createWorkspaceStore } from "./lib/workspace-store";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   LayoutDashboard,
@@ -211,9 +219,25 @@ function Chart({ records, period, setPeriod, details = false }) {
     </section>
   );
 }
-function App() {
-  const [db, S] = useState(read),
-    [page, P] = useState(getPage),
+function App({ user, loaded }) {
+  const [store] = useState(() =>
+    createWorkspaceStore(
+      loaded?.workspace ?? read(),
+      loaded?.revision ?? 0,
+      user
+        ? (db, rev) => saveWorkspace(user.id, rev, db)
+        : async (db, rev) => {
+            localStorage.setItem("flint.v1", JSON.stringify(db));
+            return rev + 1;
+          },
+    ),
+  );
+  const { db, status } = useSyncExternalStore(
+    store.subscribe,
+    store.getSnapshot,
+  );
+  const S = store.update;
+  const [page, P] = useState(getPage),
     [modal, M] = useState(""),
     [editing, E] = useState(null),
     [query, setQuery] = useState(""),
@@ -225,13 +249,19 @@ function App() {
     [msg, U] = useState("");
   const dia = useRef(null),
     imp = useRef(null);
+  useEffect(() => () => store.dispose(), [store]);
   useEffect(() => {
-    try {
-      localStorage.setItem("flint.v1", JSON.stringify(db));
-    } catch {
-      U("Storage unavailable. Export your data to keep a copy.");
-    }
-  }, [db]);
+    if (status === "saved") return;
+    const warn = (e) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    addEventListener("beforeunload", warn);
+    return () => removeEventListener("beforeunload", warn);
+  }, [status]);
+  useEffect(() => {
+    if (!user) S((d) => ({ ...d }));
+  }, [user, S]);
   useEffect(() => {
     let fn = () => {
       P(getPage());
@@ -303,7 +333,7 @@ function App() {
       }));
     if (modal === "New milestone")
       S((d) => ({ ...d, lessons: [...d.lessons, { id, name, done: false }] }));
-    U("Saved to your workspace");
+    U(user ? "Workspace updated" : "Saved to your workspace");
     M("");
   }
   const activityButton = (
@@ -541,6 +571,40 @@ function App() {
             <i /> ENV. 01 / ALPINE
           </span>
         </section>
+        {status === "saving" && user && (
+          <p role="status" className="cloud-state">
+            Saving to your cloud workspace…
+          </p>
+        )}
+        {["error", "conflict"].includes(status) && (
+          <div className="cloud-state" role="alert">
+            <p>
+              {status === "conflict"
+                ? "Another session changed this workspace. Export a backup of your unsaved edits in Settings, then reload to open the latest cloud version."
+                : user
+                  ? "Cloud save failed. Your edits are only in this tab. Retry or export a backup in Settings before leaving."
+                  : "Browser storage unavailable. Export a backup in Settings to keep your edits."}
+            </p>
+            {status === "error" && (
+              <button className="secondary" onClick={store.retry}>
+                Retry save
+              </button>
+            )}
+            {status === "conflict" && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  if (
+                    confirm("Discard unsaved edits and load the cloud version?")
+                  )
+                    location.reload();
+                }}
+              >
+                Reload cloud version
+              </button>
+            )}
+          </div>
+        )}
         {page === "Overview" && (
           <>
             {pillars}
@@ -716,6 +780,7 @@ function App() {
         )}
         {page === "Settings" && (
           <div className="panel settings">
+            <AccountSettings user={user} status={status} />
             <h3>
               <Target /> Daily pillar goals
             </h3>
@@ -752,8 +817,9 @@ function App() {
               <Settings2 /> Workspace data
             </h3>
             <p>
-              Records are saved in this browser. Export a backup before clearing
-              browser data.
+              {user
+                ? "Export a copy of your cloud workspace. Importing a backup replaces the signed-in account’s records."
+                : "Records are saved in this browser. Export a backup before clearing browser data."}
             </p>
             <button
               className="secondary"
@@ -833,8 +899,10 @@ function App() {
         {modal === "Clear workspace" ? (
           <>
             <p>
-              This removes all locally saved tracking data. Export a backup
-              first if you want to keep it.
+              {user
+                ? "This deletes all tracking data in your cloud workspace on every device."
+                : "This removes all locally saved tracking data."}{" "}
+              Export a backup first if you want to keep it.
             </p>
             <button
               className="primary"
@@ -998,4 +1066,10 @@ function calURL(r) {
     })
   );
 }
-createRoot(document.getElementById("root")).render(<App />);
+createRoot(document.getElementById("root")).render(
+  <WorkspaceGate
+    render={(user, loaded) => (
+      <App key={user?.id ?? "guest"} user={user} loaded={loaded} />
+    )}
+  />,
+);
