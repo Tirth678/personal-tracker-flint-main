@@ -6,6 +6,10 @@ A local-first personal life tracker built with React and Vite. The Life Observat
 
 Use Node.js 22.12+ and `npm ci`. Run `npm run dev` for development, `npm test` for the data tests, and `npm run build` for a production bundle in `dist/`. Deploy as a Vite static site. Hash-based navigation works without a server rewrite.
 
+## Database
+
+See [Supabase setup and database schema](docs/database.md) for the SQL migration, email sign-in, row-level security policies, and the two required public configuration values. With no Supabase configuration, the tracker continues to work locally.
+
 ## Workspace
 
 - Log dated activities with start time, pillar, and duration; filter, edit, or delete them in the activity log. Set daily minute targets in Settings.
@@ -15,7 +19,7 @@ Use Node.js 22.12+ and `npm ci`. Run `npm run dev` for development, `npm test` f
 - Time Tracker and Money Tracker use dedicated embedded views and standalone launch links. Their accounts and data remain in their respective apps; embedding depends on the hosts’ frame policies and browser cookie settings.
 - Each activity can open a prefilled Google Calendar event; save it in Google Calendar. No Google credentials are requested, and two-way account sync is not configured.
 
-The first visit seeds illustrative data. Choose **Settings → Clear workspace** to start empty. Tracking data lives in localStorage for the current browser/origin. There is no server account, cross-device synchronization, or automatic remote backup. Export and import JSON backups in Settings. Clearing site storage removes local records. Avoid using a shared browser profile for private records.
+The first visit seeds illustrative data. Choose **Settings → Clear workspace** to start empty. Tracking data lives in localStorage for the current browser/origin. When Supabase is configured, sign in under **Settings → Cloud workspace** to open a separate private account workspace that saves to PostgreSQL. Guest records are never uploaded automatically. Export and import JSON backups in Settings. Clearing site storage removes local records. Avoid using a shared browser profile for private records.
 
 ## Live statistics and the Peak Chart
 
